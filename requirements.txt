@@ -1,0 +1,7 @@
+bs4
+BeautifulSoup
+telebot
+fake_useragent
+uuid
+string
+random

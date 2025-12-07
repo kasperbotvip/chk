@@ -1,27 +1,32 @@
 import os
+import re
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
-# القيم من البيئة أو مباشرة
 BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAHhDVCjGt6g2vBrCuyAKK5Zjj3o73s7yTg")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "988757303"))
 
-# أمر /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("البوت شغال ✅")
+# دالة تتحقق من وجود رابط في الرسالة
+def extract_url(text):
+    url_pattern = r'(https?://[^\s]+)'
+    match = re.search(url_pattern, text)
+    return match.group(0) if match else None
 
-# أمر /ping يرسل للـ Admin
-async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=ADMIN_ID, text="Ping من البوت 🚀")
+# الرد التلقائي على أي رسالة تحتوي رابط
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message_text = update.message.text
+    url = extract_url(message_text)
+
+    if url:
+        await update.message.reply_text(f"📥 تم استلام الرابط:\n{url}\nجاري التحميل...")
+        # هنا تقدر تضيف كود التحميل أو المعالجة حسب نوع الرابط
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🔗 رابط جديد من @{update.effective_user.username or 'مستخدم'}:\n{url}")
+    else:
+        await update.message.reply_text("📌 أرسل رابط وسيتم التعامل معه تلقائياً.")
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-
-    # إضافة الأوامر
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("ping", ping))
-
-    # تشغيل البوت بالـ Polling
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.run_polling()
 
 if __name__ == "__main__":

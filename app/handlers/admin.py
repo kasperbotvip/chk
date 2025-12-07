@@ -1,12 +1,23 @@
 from aiogram import Router, types
-from aiogram.filters import Text
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.utils.markdown import hbold
 
 router = Router()
-storage = MemoryStorage()
 
-@router.message(Text("📊 الإحصائيات"))
+# فلتر بسيط باستخدام lambda بدل Text
+@router.message(lambda m: m.text == "📊 الإحصائيات")
 async def stats(message: types.Message):
-    # مثال مبسط — يمكنك ربطه بقاعدة بيانات لاحقاً
-    await message.answer(f"{hbold('الحالة')}: تعمل ✅\nالذاكرة: خفيفة\nطلبات: منخفضة")
+    await message.answer(
+        "📊 الحالة: تعمل ✅\n"
+        "💾 الذاكرة: خفيفة\n"
+        "📨 الطلبات: منخفضة"
+    )
+
+@router.message(lambda m: m.text == "⚙️ الإعدادات")
+async def settings(message: types.Message):
+    kb = [
+        [types.KeyboardButton(text="🔒 تغيير كلمة السر")],
+        [types.KeyboardButton(text="⬅️ رجوع")]
+    ]
+    await message.answer(
+        "⚙️ إعدادات البوت:\nاختر من القائمة:",
+        reply_markup=types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+    )

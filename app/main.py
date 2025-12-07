@@ -4,8 +4,9 @@ import subprocess
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAHhDVCjGt6g2vBrCuyAKK5Zjj3o73s7yTg")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "988757303"))
+COOKIES_PATH = os.getenv("COOKIES_PATH", "cookies.txt")  # ← المسار من .env
 
 def extract_url(text):
     url_pattern = r'(https?://[^\s]+)'
@@ -20,9 +21,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📥 تم استلام الرابط:\n{url}\nجاري التحميل...")
 
         try:
-            # تحميل الفيديو باستخدام yt-dlp
+            # تحميل الفيديو باستخدام yt-dlp مع الكوكيز
             subprocess.run([
                 "yt-dlp",
+                "--cookies", COOKIES_PATH,
                 "-f", "mp4",
                 "-o", "video.mp4",
                 url

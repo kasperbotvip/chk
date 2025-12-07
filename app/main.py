@@ -4,7 +4,7 @@ import subprocess
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("5788330295:AAHhDVCjGt6g2vBrCuyAKK5Zjj3o73s7yTg")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "988757303"))
 COOKIES_PATH = os.getenv("COOKIES_PATH", "cookies.txt")
 

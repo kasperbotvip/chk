@@ -2,7 +2,6 @@ from aiogram import Router, types
 
 router = Router()
 
-# فلتر بسيط باستخدام lambda بدل Text
 @router.message(lambda m: m.text == "📊 الإحصائيات")
 async def stats(message: types.Message):
     await message.answer(

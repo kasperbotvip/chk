@@ -4,9 +4,12 @@ import subprocess
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAHhDVCjGt6g2vBrCuyAKK5Zjj3o73s7yTg")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "988757303"))
-COOKIES_PATH = os.getenv("COOKIES_PATH", "cookies.txt")
+
+# مسارات ملفات الكوكيز
+COOKIES_YOUTUBE   = os.getenv("COOKIES_YOUTUBE", "youtube.txt")
+COOKIES_DEFAULT   = os.getenv("COOKIES_PATH", "cookies.txt")
 
 if not BOT_TOKEN or not BOT_TOKEN.strip():
     raise ValueError("❌ BOT_TOKEN غير موجود أو فارغ. تأكد أنك أضفته في Environment Variables داخل Render.")
@@ -16,6 +19,14 @@ def extract_url(text):
     match = re.search(url_pattern, text)
     return match.group(0) if match else None
 
+def get_cookies_for_url(url: str) -> str:
+    if "instagram.com" in url:
+        return COOKIES_INSTAGRAM
+    elif "youtube.com" in url or "youtu.be" in url:
+        return COOKIES_YOUTUBE
+    else:
+        return COOKIES_DEFAULT
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     url = extract_url(message_text)
@@ -24,9 +35,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📥 تم استلام الرابط:\n{url}\nجاري التحميل...")
 
         try:
+            cookies_file = get_cookies_for_url(url)
+
             subprocess.run([
                 "yt-dlp",
-                "--cookies", COOKIES_PATH,
+                "--cookies", cookies_file,
                 "-f", "mp4",
                 "-o", "video.mp4",
                 url

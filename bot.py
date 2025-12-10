@@ -1,42 +1,28 @@
 import os
 import time
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
+import uuid
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
-# مهم: استخدم pytubefix بدل pytube
-from pytubefix import YouTube
+from moviepy.editor import VideoFileClip
 
-# التوكن من متغير البيئة (على Render حط BOT_TOKEN)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAG-F0MqkTVJkhmG5TaX6sxcD0NeXOohnis")
+# التوكن من متغير البيئة (على Render حطه كـ BOT_TOKEN)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAFOQZWDUTw80xSB_4TPxfRQ5Hl_xhj1tF4")
 
-# إعدادات حماية
-MAX_DURATION_MIN = 15          # أقصى مدة للفيديو بالدقائق
-MAX_FILE_SIZE_MB = 45          # أقصى حجم تقريبي للملف المرسل
-RATE_LIMIT_SECONDS = 20        # كل مستخدم ينتظر 20 ثانية بين التحميلات
-
-user_last_request = {}         # لتتبع آخر طلب لكل مستخدم
-
-
-# ========= دوال مساعدة =========
-
-def bytes_to_mb(size_bytes: int) -> float:
-    return size_bytes / (1024 * 1024)
+# حماية بسيطة من السبام
+RATE_LIMIT_SECONDS = 20  # كل مستخدم ينتظر 20 ثانية بين كل تحويل
+user_last_request = {}
 
 
 def check_rate_limit(user_id: int) -> int:
     """
-    يرجّع كم ثانية باقي ينتظر المستخدم لو مسوي سبام.
-    لو 0 يعني مسموح يحمل.
+    يرجّع كم ثانية باقي لو المستخدم عدّه سبام،
+    ولو 0 معناها مسموح.
     """
     now = time.time()
     last = user_last_request.get(user_id, 0)
@@ -51,247 +37,114 @@ def check_rate_limit(user_id: int) -> int:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "هلا 🙌\n"
-        "أنا بوت تحميل من يوتيوب 🎥🎧\n\n"
-        "▫️ أرسل رابط فيديو من YouTube\n"
-        "▫️ بعدها راح تطلع لك أزرار: تحميل فيديو أو صوت\n"
-        "▫️ تختار الجودة وبس 👍"
+        "هلا بيك 🙌\n"
+        "أنا بوت يحوّل الفيديو إلى صوت (MP3) 🎧\n\n"
+        "▫️ فقط أرسل لي فيديو (كـ فيديو عادي أو ملف)\n"
+        "▫️ راح أرجع لك الصوت المستخرج من الفيديو."
     )
 
 
-# ========= استقبال رابط اليوتيوب =========
+# ========= التعامل مع الفيديوهات =========
 
-async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message:
         return
 
-    url = update.message.text.strip()
-    user_id = update.message.from_user.id
+    user_id = message.from_user.id
 
-    # سبام
+    # حماية سبام خفيفة
     wait_sec = check_rate_limit(user_id)
     if wait_sec > 0:
-        await update.message.reply_text(
-            f"⏳ رجاءً انتظر {wait_sec} ثانية قبل طلب تحميل جديد."
+        await message.reply_text(
+            f"⏳ رجاءً انتظر {wait_sec} ثانية قبل طلب جديد."
         )
         return
 
-    # تأكد إنه يوتيوب
-    if "youtube.com" not in url and "youtu.be" not in url:
-        await update.message.reply_text("❌ أرسل رابط من YouTube فقط.")
+    # نحدد هل هو فيديو عادي أو ملف فيديو
+    tg_file = None
+    file_name = None
+
+    if message.video:
+        tg_file = await message.video.get_file()
+        file_name = message.video.file_name or "video.mp4"
+    elif message.document and message.document.mime_type and "video" in message.document.mime_type:
+        tg_file = await message.document.get_file()
+        file_name = message.document.file_name or "video.mp4"
+    else:
+        await message.reply_text("❌ أرسل فيديو كـ رسالة فيديو أو ملف فيديو.")
         return
 
-    # خزِّن الرابط في user_data (خاص بالمستخدم)
-    context.user_data["yt_url"] = url
+    await message.reply_text("⬇️ استلمت الفيديو، جاري التحويل إلى صوت… انتظر شوي 🎧")
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🎥 تحميل فيديو", callback_data="type:video"),
-            InlineKeyboardButton("🎧 تحميل صوت", callback_data="type:audio"),
-        ]
-    ]
-    await update.message.reply_text(
-        "اختر نوع التحميل:", reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    # مسارات مؤقتة
+    unique_id = uuid.uuid4().hex
+    input_path = f"input_{unique_id}.mp4"
+    output_path = f"audio_{unique_id}.mp3"
 
-
-# ========= التعامل مع الأزرار =========
-
-async def buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-    user_data = context.user_data
-    url = user_data.get("yt_url")
-
-    if not url:
-        await query.edit_message_text("⚠ ما لقيت الرابط، أرسل رابط يوتيوب من جديد.")
-        return
-
-    # 1) اختيار نوع التحميل
-    if data.startswith("type:"):
-        dl_type = data.split(":")[1]  # video أو audio
-        user_data["dl_type"] = dl_type
-
-        if dl_type == "video":
-            # أزرار الجودة للفيديو
-            kb = [
-                [
-                    InlineKeyboardButton("360p", callback_data="v_quality:360p"),
-                    InlineKeyboardButton("480p", callback_data="v_quality:480p"),
-                ],
-                [
-                    InlineKeyboardButton("720p", callback_data="v_quality:720p"),
-                    InlineKeyboardButton("أعلى جودة", callback_data="v_quality:best"),
-                ],
-            ]
-            await query.edit_message_text(
-                "اختر جودة الفيديو:", reply_markup=InlineKeyboardMarkup(kb)
-            )
-
-        elif dl_type == "audio":
-            kb = [
-                [InlineKeyboardButton("🎧 أفضل جودة صوت", callback_data="a_quality:best")]
-            ]
-            await query.edit_message_text(
-                "اختر جودة الصوت:", reply_markup=InlineKeyboardMarkup(kb)
-            )
-
-        return
-
-    # 2) اختيار جودة الفيديو
-    if data.startswith("v_quality:"):
-        quality = data.split(":")[1]  # 360p / 480p / 720p / best
-        await download_video(query, context, url, quality)
-        return
-
-    # 3) اختيار جودة الصوت
-    if data.startswith("a_quality:"):
-        quality = data.split(":")[1]  # حالياً بس best
-        await download_audio(query, context, url, quality)
-        return
-
-
-# ========= تحميل الفيديو =========
-
-async def download_video(query, context, url: str, quality: str):
     try:
-        await query.edit_message_text("⏳ جاري فحص الفيديو…")
+        # تحميل الملف من تيليجرام إلى السيرفر
+        await tg_file.download_to_drive(input_path)
 
-        yt = YouTube(url)
+        # استخدام moviepy لاستخراج الصوت
+        video_clip = VideoFileClip(input_path)
 
-        # فحص مدة الفيديو
-        duration_min = yt.length / 60
-        if duration_min > MAX_DURATION_MIN:
-            await query.edit_message_text(
-                f"⚠ مدة الفيديو {int(duration_min)} دقيقة.\n"
-                f"الحد الأقصى المسموح: {MAX_DURATION_MIN} دقيقة."
-            )
+        if video_clip.audio is None:
+            await message.reply_text("❌ هذا الفيديو لا يحتوي على مسار صوت.")
+            video_clip.close()
+            os.remove(input_path)
             return
 
-        # اختيار الستريم بناءً على الجودة
-        if quality == "best":
-            stream = yt.streams.filter(
-                progressive=True, file_extension="mp4"
-            ).get_highest_resolution()
-        else:
-            stream = yt.streams.filter(
-                progressive=True, file_extension="mp4", res=quality
-            ).first()
-            if not stream:
-                stream = yt.streams.filter(
-                    progressive=True, file_extension="mp4"
-                ).get_highest_resolution()
+        # كتابة الصوت إلى ملف MP3
+        video_clip.audio.write_audiofile(output_path, verbose=False, logger=None)
+        video_clip.close()
 
-        if not stream:
-            await query.edit_message_text("❌ ما قدرت ألقى ستريم مناسب للفيديو.")
-            return
+        # إرسال الصوت للمستخدم
+        await message.reply_text("📤 تم استخراج الصوت، جاري الإرسال…")
 
-        await query.edit_message_text("⬇️ جاري تحميل الفيديو… (انتظر)")
-
-        file_path = stream.download()
-        file_size_mb = bytes_to_mb(os.path.getsize(file_path))
-
-        if file_size_mb > MAX_FILE_SIZE_MB:
-            os.remove(file_path)
-            await query.edit_message_text(
-                f"⚠ حجم الفيديو {file_size_mb:.1f} MB أكبر من الحد {MAX_FILE_SIZE_MB} MB."
-            )
-            return
-
-        await query.edit_message_text("📤 جاري إرسال الفيديو…")
-
-        await context.bot.send_video(
-            chat_id=query.message.chat_id,
-            video=open(file_path, "rb"),
-            caption=f"{yt.title}\nالجودة: {stream.resolution}",
-        )
-
-        os.remove(file_path)
-
-        await query.edit_message_text("✅ تم إرسال الفيديو بنجاح.")
-
-    except Exception as e:
-        await query.edit_message_text(f"❌ صار خطأ أثناء تحميل الفيديو:\n{e}")
-
-
-# ========= تحميل الصوت =========
-
-async def download_audio(query, context, url: str, quality: str):
-    try:
-        await query.edit_message_text("⏳ جاري فحص الفيديو…")
-
-        yt = YouTube(url)
-
-        duration_min = yt.length / 60
-        if duration_min > MAX_DURATION_MIN:
-            await query.edit_message_text(
-                f"⚠ مدة الفيديو {int(duration_min)} دقيقة.\n"
-                f"الحد الأقصى المسموح: {MAX_DURATION_MIN} دقيقة."
-            )
-            return
-
-        await query.edit_message_text("⬇️ جاري تحميل الصوت… (انتظر)")
-
-        # أفضل ستريم صوت
-        stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
-
-        if not stream:
-            await query.edit_message_text("❌ ما لقيت ستريم صوت مناسب.")
-            return
-
-        file_path = stream.download(filename_prefix="audio_")
-        file_size_mb = bytes_to_mb(os.path.getsize(file_path))
-
-        if file_size_mb > MAX_FILE_SIZE_MB:
-            os.remove(file_path)
-            await query.edit_message_text(
-                f"⚠ حجم الصوت {file_size_mb:.1f} MB أكبر من الحد {MAX_FILE_SIZE_MB} MB."
-            )
-            return
-
-        await query.edit_message_text("📤 جاري إرسال الصوت…")
-
-        # أحياناً تيليجرام يدقّق على النوع، لو صار خطأ نرجع نرسله كـ document
-        try:
+        with open(output_path, "rb") as audio_file:
+            # نستخدم send_audio حتى يظهر كملف صوت
             await context.bot.send_audio(
-                chat_id=query.message.chat_id,
-                audio=open(file_path, "rb"),
-                title=yt.title,
-                caption="🎧 تم استخراج الصوت من يوتيوب",
-            )
-        except Exception:
-            await context.bot.send_document(
-                chat_id=query.message.chat_id,
-                document=open(file_path, "rb"),
-                caption="🎧 تم استخراج الصوت من يوتيوب (ملف)",
+                chat_id=message.chat_id,
+                audio=audio_file,
+                title=file_name,
+                caption="🎧 هذا الصوت المستخرج من الفيديو."
             )
 
-        os.remove(file_path)
-
-        await query.edit_message_text("✅ تم إرسال الصوت بنجاح.")
+        await message.reply_text("✅ تم الإرسال بنجاح.")
 
     except Exception as e:
-        await query.edit_message_text(f"❌ صار خطأ أثناء تحميل الصوت:\n{e}")
+        # لو صار خطأ نطبع نصه حتى تقدر تشوفه
+        await message.reply_text(f"❌ صار خطأ أثناء التحويل:\n{e}")
+    finally:
+        # تنظيف الملفات المؤقتة
+        try:
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception:
+            pass
 
 
 # ========= تشغيل البوت =========
 
 def main():
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("❌ BOT_TOKEN غير مضبوط، حطّه في متغير بيئة أو داخل الكود.")
+        print("❌ BOT_TOKEN غير مضبوط، حطّه بمتغير بيئة أو داخل الكود.")
         return
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # الهاندلرات
+    # /start
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
-    app.add_handler(CallbackQueryHandler(buttons_handler))
+
+    # استقبال الفيديوهات (video أو document/video)
+    video_filter = filters.VIDEO | (filters.Document.VIDEO)
+    app.add_handler(MessageHandler(video_filter, handle_video))
 
     print("🚀 البوت يعمل الآن (Polling)…")
-    app.run_polling()  # بدون asyncio.run وبدون await
+    app.run_polling()
 
 
 if __name__ == "__main__":

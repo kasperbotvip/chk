@@ -1,6 +1,2 @@
-python-telegram-bot==20.3
-aiohttp
-python-dotenv
-psycopg2-binary
-telegram
-yt-dlp
+python-telegram-bot==21.4
+pytube

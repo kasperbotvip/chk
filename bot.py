@@ -12,7 +12,7 @@ from telegram.ext import (
 from moviepy.editor import VideoFileClip
 
 # التوكن من متغير البيئة (على Render حطه كـ BOT_TOKEN)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAFOQZWDUTw80xSB_4TPxfRQ5Hl_xhj1tF4")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAH3OJMoXFukkprXF1L_EesqduP4_VZSCCA")
 
 # حماية بسيطة من السبام
 RATE_LIMIT_SECONDS = 20  # كل مستخدم ينتظر 20 ثانية بين كل تحويل

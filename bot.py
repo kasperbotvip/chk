@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 from pytube import YouTube
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAHhDVCjGt6g2vBrCuyAKK5Zjj3o73s7yTg")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "5788330295:AAG-F0MqkTVJkhmG5TaX6sxcD0NeXOohnis")
 
 MAX_DURATION_MIN = 15
 MAX_FILE_SIZE_MB = 45

@@ -1,2 +1,2 @@
 python-telegram-bot==21.8
-pytubefix==1.5.2
+pytubefix==10.3.6
